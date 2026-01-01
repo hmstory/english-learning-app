@@ -740,37 +740,267 @@ h1 {
     border: 1.5px solid var(--error-color);
 }
 
-@media (max-width: 600px) {
-    body {
-        padding: var(--spacing-md);
-    }
-
-    .mode-selector {
-        flex-direction: column;
-    }
-
-    .sentence {
-        font-size: 1.375rem;
-        line-height: 1.5;
+/* 태블릿 최적화 */
+@media (max-width: 768px) {
+    .container {
+        max-width: 100%;
     }
 
     .card-container {
-        padding: var(--spacing-xl);
-        min-height: 420px;
+        padding: var(--spacing-lg);
+    }
+
+    .stats-bar {
+        gap: var(--spacing-sm);
+    }
+
+    .stat-item {
+        min-width: 110px;
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+    }
+}
+
+/* 모바일 최적화 */
+@media (max-width: 600px) {
+    body {
+        padding: var(--spacing-sm);
+        font-size: 16px;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    .container {
+        max-width: 100%;
+    }
+
+    header {
+        margin-bottom: var(--spacing-lg);
     }
 
     h1 {
-        font-size: 1.875rem;
+        font-size: 1.75rem;
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .subtitle {
+        font-size: 0.9375rem;
     }
 
     .header-top {
-        flex-direction: column;
-        gap: var(--spacing-md);
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-xs);
     }
 
     .theme-toggle {
         position: static;
         transform: none;
+        width: 40px;
+        height: 40px;
+        font-size: 1.1em;
+    }
+
+    .stats-bar {
+        flex-direction: row;
+        gap: var(--spacing-xs);
+        margin-bottom: var(--spacing-lg);
+        flex-wrap: wrap;
+    }
+
+    .stat-item {
+        flex: 1;
+        min-width: 0;
+        padding: var(--spacing-sm) var(--spacing-md);
+        border-radius: 12px;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .stat-value {
+        font-size: 1.25rem;
+    }
+
+    .mode-selector {
+        flex-direction: row;
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .mode-btn {
+        flex: 1;
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.9375rem;
+        min-height: 44px; /* 터치 영역 최소 크기 */
+    }
+
+    .mode-icon {
+        font-size: 1em;
+    }
+
+    .card-container {
+        padding: var(--spacing-md);
+        min-height: auto;
+        border-radius: 20px;
+    }
+
+    .progress-section {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .progress-text {
+        font-size: 0.875rem;
+    }
+
+    .progress-bar {
+        height: 5px;
+    }
+
+    #content {
+        min-height: 240px;
+    }
+
+    .flashcard-wrapper {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .flashcard {
+        min-height: 260px;
+        max-width: 100%;
+    }
+
+    .flashcard-inner {
+        min-height: 260px;
+    }
+
+    .flashcard-front, .flashcard-back {
+        min-height: 260px;
+        padding: var(--spacing-md);
+        border-radius: 16px;
+    }
+
+    .sentence {
+        font-size: 1.25rem;
+        line-height: 1.6;
+        padding: 0 var(--spacing-xs);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .meaning {
+        font-size: 1.125rem;
+        line-height: 1.6;
+        padding: 0 var(--spacing-xs);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .difficulty-tag {
+        font-size: 0.75rem;
+        padding: 4px var(--spacing-sm);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .source {
+        font-size: 0.8125rem;
+        margin-top: var(--spacing-md);
+    }
+
+    .hint {
+        font-size: 0.8125rem;
+        margin-top: var(--spacing-md);
+    }
+
+    .quiz-options {
+        gap: var(--spacing-sm);
+        margin-top: var(--spacing-md);
+    }
+
+    .option-btn {
+        padding: var(--spacing-md) var(--spacing-lg);
+        font-size: 0.9375rem;
+        min-height: 48px; /* 터치 영역 최소 크기 */
+        border-radius: 12px;
+    }
+
+    .controls {
+        margin-top: var(--spacing-lg);
+        gap: var(--spacing-sm);
+    }
+
+    .btn {
+        padding: var(--spacing-md) var(--spacing-lg);
+        font-size: 0.9375rem;
+        min-height: 44px; /* 터치 영역 최소 크기 */
+        border-radius: 12px;
+        flex: 1;
+    }
+
+    .btn-icon {
+        font-size: 1em;
+    }
+
+    .explanation-container {
+        padding: var(--spacing-md);
+        border-radius: 16px;
+    }
+
+    .explanation-header {
+        margin-bottom: var(--spacing-md);
+        padding-bottom: var(--spacing-sm);
+    }
+
+    .explanation-header h3 {
+        font-size: 1.125rem;
+    }
+
+    .explanation-toggle {
+        width: 32px;
+        height: 32px;
+        font-size: 0.875rem;
+    }
+
+    .explanation-item {
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-sm);
+        border-radius: 12px;
+    }
+
+    .explanation-item h4 {
+        font-size: 0.9375rem;
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .explanation-item p {
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+
+    .key-expression {
+        font-size: 1rem !important;
+    }
+
+    .feedback {
+        padding: var(--spacing-md);
+        border-radius: 12px;
+        margin-top: var(--spacing-md);
+        font-size: 0.9375rem;
+    }
+}
+
+/* 작은 모바일 (iPhone SE 등) */
+@media (max-width: 375px) {
+    body {
+        padding: var(--spacing-xs);
+    }
+
+    h1 {
+        font-size: 1.5rem;
     }
 
     .stats-bar {
@@ -781,20 +1011,39 @@ h1 {
         width: 100%;
     }
 
-    .flashcard {
-        min-height: 280px;
+    .mode-selector {
+        flex-direction: column;
     }
 
-    .flashcard-front, .flashcard-back {
-        min-height: 280px;
-        padding: var(--spacing-xl);
+    .sentence {
+        font-size: 1.125rem;
     }
 
     .meaning {
-        font-size: 1.25rem;
+        font-size: 1rem;
     }
 
-    .explanation-container {
-        padding: var(--spacing-lg);
+    .flashcard {
+        min-height: 240px;
+    }
+
+    .flashcard-front, .flashcard-back {
+        min-height: 240px;
+        padding: var(--spacing-sm);
+    }
+}
+
+/* 터치 디바이스 최적화 */
+@media (hover: none) and (pointer: coarse) {
+    .btn:hover,
+    .mode-btn:hover,
+    .option-btn:hover {
+        transform: none;
+    }
+
+    .btn:active,
+    .mode-btn:active,
+    .option-btn:active {
+        transform: scale(0.98);
     }
 }
