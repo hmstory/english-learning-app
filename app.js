@@ -265,7 +265,9 @@ function renderQuiz(item) {
     const explanationSection = document.getElementById('explanation-section');
     
     // 해설 섹션 숨기기
-    explanationSection.style.display = 'none';
+    if (explanationSection) {
+        explanationSection.style.display = 'none';
+    }
     
     // 핵심 표현 추출
     const keyExpr = item.keyExpression || extractKeyExpression(item.sentence);
@@ -299,22 +301,33 @@ function renderFillBlankQuiz(item, keyExpr) {
     let finalSentence = '';
     
     // 방법 1: 전체 핵심 표현을 빈칸으로
-    const regex1 = new RegExp(escapeRegex(keyExpr), 'gi');
-    if (regex1.test(sentence)) {
-        finalSentence = sentence.replace(regex1, blankPlaceholder);
+    if (keyExpr && keyExpr.trim().length > 0) {
+        try {
+            const regex1 = new RegExp(escapeRegex(keyExpr), 'gi');
+            if (regex1.test(sentence)) {
+                finalSentence = sentence.replace(regex1, blankPlaceholder);
+            }
+        } catch (e) {
+            console.warn('정규식 생성 실패:', e);
+        }
     }
     
     // 방법 2: 실패하면 핵심 표현의 주요 단어들로 시도
     if (!finalSentence || !finalSentence.includes(blankPlaceholder)) {
-        const keyWords = keyExpr.split(/\s+/).filter(w => w.length > 2);
+        const keyWords = keyExpr.split(/\s+/).filter(w => w && w.length > 2);
         if (keyWords.length > 0) {
             // 가장 긴 단어부터 시도
             keyWords.sort((a, b) => b.length - a.length);
             for (const word of keyWords) {
-                const wordRegex = new RegExp('\\b' + escapeRegex(word) + '\\b', 'gi');
-                if (wordRegex.test(sentence)) {
-                    finalSentence = sentence.replace(wordRegex, blankPlaceholder);
-                    break;
+                try {
+                    const wordRegex = new RegExp('\\b' + escapeRegex(word) + '\\b', 'gi');
+                    if (wordRegex.test(sentence)) {
+                        finalSentence = sentence.replace(wordRegex, blankPlaceholder);
+                        break;
+                    }
+                } catch (e) {
+                    console.warn('단어 정규식 생성 실패:', e);
+                    continue;
                 }
             }
         }
@@ -322,10 +335,14 @@ function renderFillBlankQuiz(item, keyExpr) {
     
     // 방법 3: 여전히 실패하면 핵심 표현의 첫 단어 사용
     if (!finalSentence || !finalSentence.includes(blankPlaceholder)) {
-        const firstWord = keyExpr.split(/\s+/)[0];
+        const firstWord = keyExpr.split(/\s+/).filter(w => w && w.length > 0)[0];
         if (firstWord) {
-            const firstWordRegex = new RegExp('\\b' + escapeRegex(firstWord) + '\\b', 'gi');
-            finalSentence = sentence.replace(firstWordRegex, blankPlaceholder);
+            try {
+                const firstWordRegex = new RegExp('\\b' + escapeRegex(firstWord) + '\\b', 'gi');
+                finalSentence = sentence.replace(firstWordRegex, blankPlaceholder);
+            } catch (e) {
+                console.warn('첫 단어 정규식 생성 실패:', e);
+            }
         }
     }
     
@@ -449,22 +466,45 @@ function renderTranslationQuiz(item, keyExpr) {
 
 // 공통 퀴즈 콘텐츠 렌더링
 function renderQuizContent(content, item, options, keyExpr, questionHtml) {
-    content.innerHTML = `
-        <div>
-            ${questionHtml}
-            <div class="quiz-options" role="radiogroup">
-                ${options.map((opt, i) => `
-                    <button class="option-btn" 
-                            onclick="selectAnswer('${escapeHtml(opt).replace(/'/g, "\\'")}', '${escapeHtml(keyExpr).replace(/'/g, "\\'")}')" 
-                            data-option="${escapeHtml(opt).replace(/"/g, '&quot;')}"
-                            aria-label="선택지 ${i + 1}: ${escapeHtml(opt)}">
-                        <span>${escapeHtml(opt)}</span>
-                    </button>
-                `).join('')}
-            </div>
-            <div id="feedback"></div>
-        </div>
-    `;
+    // 전체 HTML 구조 생성
+    const container = document.createElement('div');
+    container.innerHTML = questionHtml;
+    
+    // 퀴즈 옵션 컨테이너 생성
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'quiz-options';
+    optionsContainer.setAttribute('role', 'radiogroup');
+    
+    // 각 옵션 버튼 생성
+    options.forEach((opt, i) => {
+        const button = document.createElement('button');
+        button.className = 'option-btn';
+        button.setAttribute('data-option', escapeHtml(opt));
+        button.setAttribute('aria-label', `선택지 ${i + 1}: ${escapeHtml(opt)}`);
+        
+        const span = document.createElement('span');
+        span.textContent = opt;
+        button.appendChild(span);
+        
+        // 이벤트 리스너로 안전하게 연결
+        button.addEventListener('click', () => {
+            selectAnswer(opt, keyExpr);
+        });
+        
+        optionsContainer.appendChild(button);
+    });
+    
+    // 피드백 영역 생성
+    const feedbackDiv = document.createElement('div');
+    feedbackDiv.id = 'feedback';
+    
+    // 컨테이너에 추가
+    container.appendChild(optionsContainer);
+    container.appendChild(feedbackDiv);
+    
+    // content에 설정
+    content.innerHTML = '';
+    content.appendChild(container);
     
     selectedAnswer = null;
 }
@@ -532,6 +572,11 @@ function flipCard() {
 function selectAnswer(selected, correct) {
     if (selectedAnswer) return; // 이미 답을 선택함
     
+    if (!selected || !correct) {
+        console.error('selectAnswer: selected 또는 correct가 없습니다');
+        return;
+    }
+    
     // HTML 디코딩 (비교를 위해)
     const selectedDecoded = decodeHtml(selected);
     const correctDecoded = decodeHtml(correct);
@@ -539,6 +584,11 @@ function selectAnswer(selected, correct) {
     selectedAnswer = selectedDecoded;
     const buttons = document.querySelectorAll('.option-btn');
     const feedback = document.getElementById('feedback');
+    
+    if (!feedback) {
+        console.error('피드백 요소를 찾을 수 없습니다');
+        return;
+    }
     
     // 통계 업데이트
     quizStats.total++;
@@ -549,6 +599,8 @@ function selectAnswer(selected, correct) {
     
     buttons.forEach(btn => {
         const option = btn.getAttribute('data-option');
+        if (!option) return;
+        
         btn.disabled = true;
         
         // HTML 엔티티 디코딩하여 비교
@@ -561,19 +613,29 @@ function selectAnswer(selected, correct) {
         }
     });
     
-    const item = data[currentIndex];
+    // 현재 아이템 가져오기
+    if (!data || !Array.isArray(data) || currentIndex < 0 || currentIndex >= data.length) {
+        console.error('유효하지 않은 데이터 또는 인덱스');
+        return;
+    }
     
     const item = data[currentIndex];
+    
+    if (!item) {
+        console.error('아이템을 찾을 수 없습니다');
+        feedback.innerHTML = '<div class="feedback wrong" role="alert">오류가 발생했습니다.</div>';
+        return;
+    }
     
     if (isCorrect) {
         feedback.innerHTML = `
             <div class="feedback correct" role="alert">
                 <div style="font-size: 1.5em; margin-bottom: 10px;">✓ 정답입니다!</div>
                 <div style="font-weight: normal; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
-                    <strong>의미:</strong> ${escapeHtml(item.native_core_meaning)}
+                    <strong>의미:</strong> ${escapeHtml(item.native_core_meaning || '')}
                 </div>
                 <div style="font-weight: normal; margin-top: 10px; font-style: italic; opacity: 0.9;">
-                    ${escapeHtml(item.natural_korean)}
+                    ${escapeHtml(item.natural_korean || '')}
                 </div>
             </div>
         `;
@@ -585,10 +647,10 @@ function selectAnswer(selected, correct) {
                     <strong>정답:</strong> <span style="color: #4ade80; font-weight: 600;">${escapeHtml(correctDecoded)}</span>
                 </div>
                 <div style="font-weight: normal; margin-top: 10px;">
-                    <strong>의미:</strong> ${escapeHtml(item.native_core_meaning)}
+                    <strong>의미:</strong> ${escapeHtml(item.native_core_meaning || '')}
                 </div>
                 <div style="font-weight: normal; margin-top: 10px; font-style: italic; opacity: 0.9;">
-                    ${escapeHtml(item.natural_korean)}
+                    ${escapeHtml(item.natural_korean || '')}
                 </div>
             </div>
         `;
