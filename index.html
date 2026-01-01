@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Big Little Lies 원서를 활용한 영어 단어 및 표현 학습 앱">
+    <title>영어 원서 단어 학습 앱</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1>📚 영어 원서 학습</h1>
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="다크 모드 전환" id="themeToggle">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+            <p class="subtitle">Big Little Lies 문장 암기</p>
+        </header>
+
+        <div class="stats-bar" id="statsBar">
+            <div class="stat-item">
+                <span class="stat-label">진행률</span>
+                <span class="stat-value" id="progressPercent">0%</span>
+            </div>
+            <div class="stat-item" id="quizStats" style="display: none;">
+                <span class="stat-label">정답률</span>
+                <span class="stat-value" id="correctRate">-</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">학습한 카드</span>
+                <span class="stat-value" id="studiedCount">0</span>
+            </div>
+        </div>
+
+        <div class="mode-selector" role="tablist">
+            <button class="mode-btn active" onclick="setMode('flashcard')" aria-pressed="true" aria-label="플래시카드 모드">
+                <span class="mode-icon">🎴</span>
+                <span>플래시카드</span>
+            </button>
+            <button class="mode-btn" onclick="setMode('quiz')" aria-pressed="false" aria-label="퀴즈 모드">
+                <span class="mode-icon">❓</span>
+                <span>핵심 표현 퀴즈</span>
+            </button>
+        </div>
+
+        <div class="card-container">
+            <div class="progress-section">
+                <div class="progress-header">
+                    <span class="progress-text" id="progress" aria-live="polite">1 / 10</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+            <div id="content" role="main"></div>
+            <div id="explanation-section" style="display: none;"></div>
+            <div class="controls">
+                <button class="btn btn-secondary" onclick="previousCard()" id="prevBtn" aria-label="이전 카드">
+                    <span class="btn-icon">←</span>
+                    <span>이전</span>
+                </button>
+                <button class="btn btn-primary" onclick="nextCard()" id="nextBtn" aria-label="다음 카드">
+                    <span>다음</span>
+                    <span class="btn-icon">→</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
