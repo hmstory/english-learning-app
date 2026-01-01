@@ -253,7 +253,13 @@ function toggleExplanation() {
     }
 }
 
-// 퀴즈 렌더링
+// 퀴즈 유형 선택 (랜덤)
+function getQuizType() {
+    const types = ['fillBlank', 'context', 'translation'];
+    return types[Math.floor(Math.random() * types.length)];
+}
+
+// 퀴즈 렌더링 - 다양한 유형 지원
 function renderQuiz(item) {
     const content = document.getElementById('content');
     const explanationSection = document.getElementById('explanation-section');
@@ -264,14 +270,75 @@ function renderQuiz(item) {
     // 핵심 표현 추출
     const keyExpr = item.keyExpression || extractKeyExpression(item.sentence);
     
-    // 퀴즈에서는 하이라이트하지 않고 원문 그대로 표시
-    const sentence = escapeHtml(item.sentence);
+    if (!keyExpr || keyExpr.length === 0) {
+        content.innerHTML = '<p style="text-align: center; color: #f56565;">퀴즈를 생성할 수 없습니다.</p>';
+        return;
+    }
     
-    // 오답 생성 (다른 문장들의 핵심 표현)
+    // 퀴즈 유형 선택
+    const quizType = getQuizType();
+    
+    if (quizType === 'fillBlank') {
+        renderFillBlankQuiz(item, keyExpr);
+    } else if (quizType === 'context') {
+        renderContextQuiz(item, keyExpr);
+    } else {
+        renderTranslationQuiz(item, keyExpr);
+    }
+}
+
+// 빈칸 채우기 퀴즈
+function renderFillBlankQuiz(item, keyExpr) {
+    const content = document.getElementById('content');
+    
+    // 문장에서 핵심 표현을 빈칸으로 대체
+    const sentence = item.sentence;
+    const blankPlaceholder = '______';
+    
+    // 여러 방법으로 빈칸 생성 시도
+    let finalSentence = '';
+    
+    // 방법 1: 전체 핵심 표현을 빈칸으로
+    const regex1 = new RegExp(escapeRegex(keyExpr), 'gi');
+    if (regex1.test(sentence)) {
+        finalSentence = sentence.replace(regex1, blankPlaceholder);
+    }
+    
+    // 방법 2: 실패하면 핵심 표현의 주요 단어들로 시도
+    if (!finalSentence || !finalSentence.includes(blankPlaceholder)) {
+        const keyWords = keyExpr.split(/\s+/).filter(w => w.length > 2);
+        if (keyWords.length > 0) {
+            // 가장 긴 단어부터 시도
+            keyWords.sort((a, b) => b.length - a.length);
+            for (const word of keyWords) {
+                const wordRegex = new RegExp('\\b' + escapeRegex(word) + '\\b', 'gi');
+                if (wordRegex.test(sentence)) {
+                    finalSentence = sentence.replace(wordRegex, blankPlaceholder);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // 방법 3: 여전히 실패하면 핵심 표현의 첫 단어 사용
+    if (!finalSentence || !finalSentence.includes(blankPlaceholder)) {
+        const firstWord = keyExpr.split(/\s+/)[0];
+        if (firstWord) {
+            const firstWordRegex = new RegExp('\\b' + escapeRegex(firstWord) + '\\b', 'gi');
+            finalSentence = sentence.replace(firstWordRegex, blankPlaceholder);
+        }
+    }
+    
+    // 최종적으로 빈칸이 없으면 원문 그대로 사용 (fallback)
+    if (!finalSentence || !finalSentence.includes(blankPlaceholder)) {
+        finalSentence = sentence;
+    }
+    
+    // 오답 생성 (다른 문장들의 핵심 표현 또는 유사한 표현)
     const otherExpressions = data
         .filter((_, i) => i !== currentIndex)
         .map(d => d.keyExpression || extractKeyExpression(d.sentence))
-        .filter(expr => expr && expr.length > 0)
+        .filter(expr => expr && expr.length > 0 && expr !== keyExpr)
         .sort(() => 0.5 - Math.random())
         .slice(0, 3);
     
@@ -284,13 +351,107 @@ function renderQuiz(item) {
         return;
     }
     
+    // 빈칸을 시각적으로 강조하기 위해 스타일 적용
+    const sentenceWithStyledBlank = escapeHtml(finalSentence).replace(
+        /______/g,
+        '<span class="quiz-blank" style="display: inline-block; padding: 4px 12px; margin: 0 4px; background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); color: white; border-radius: 6px; font-weight: 600; font-size: 1.1em; min-width: 120px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">______</span>'
+    );
+    
+    renderQuizContent(content, item, options, keyExpr, `
+        <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
+        <div class="sentence quiz-sentence" style="margin-bottom: 30px; line-height: 1.8;">
+            ${sentenceWithStyledBlank}
+        </div>
+        <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 20px; font-weight: 600; text-align: center;">
+            빈칸에 들어갈 적절한 표현을 선택하세요
+        </p>
+    `);
+}
+
+// 문맥 이해 퀴즈 (한국어 번역을 보고 적절한 영어 표현 선택)
+function renderContextQuiz(item, keyExpr) {
+    const content = document.getElementById('content');
+    
+    // 오답 생성
+    const otherExpressions = data
+        .filter((_, i) => i !== currentIndex)
+        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
+        .filter(expr => expr && expr.length > 0 && expr !== keyExpr)
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
+    
+    const options = [...otherExpressions, keyExpr]
+        .filter(opt => opt && opt.length > 0)
+        .sort(() => 0.5 - Math.random());
+    
+    if (options.length === 0) {
+        content.innerHTML = '<p style="text-align: center; color: #f56565;">퀴즈를 생성할 수 없습니다.</p>';
+        return;
+    }
+    
+    renderQuizContent(content, item, options, keyExpr, `
+        <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
+        <div style="background: var(--card-bg); padding: var(--spacing-lg); border-radius: 12px; margin-bottom: 25px; border-left: 4px solid var(--primary-color);">
+            <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 15px; font-weight: 600;">
+                📖 한국어 번역:
+            </p>
+            <p style="font-size: 1.15rem; line-height: 1.7; color: var(--text-primary); font-style: italic;">
+                "${escapeHtml(item.natural_korean)}"
+            </p>
+        </div>
+        <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 20px; font-weight: 600; text-align: center;">
+            위 번역에 해당하는 영어 문장의 핵심 표현은?
+        </p>
+        <div style="background: var(--card-bg); padding: var(--spacing-md); border-radius: 8px; margin-bottom: 20px; opacity: 0.8;">
+            <p style="font-size: 0.95rem; color: var(--text-tertiary); text-align: center;">
+                ${escapeHtml(item.sentence)}
+            </p>
+        </div>
+    `);
+}
+
+// 번역 기반 퀴즈 (핵심 표현의 의미를 보고 선택)
+function renderTranslationQuiz(item, keyExpr) {
+    const content = document.getElementById('content');
+    
+    // 오답 생성
+    const otherExpressions = data
+        .filter((_, i) => i !== currentIndex)
+        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
+        .filter(expr => expr && expr.length > 0 && expr !== keyExpr)
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
+    
+    const options = [...otherExpressions, keyExpr]
+        .filter(opt => opt && opt.length > 0)
+        .sort(() => 0.5 - Math.random());
+    
+    if (options.length === 0) {
+        content.innerHTML = '<p style="text-align: center; color: #f56565;">퀴즈를 생성할 수 없습니다.</p>';
+        return;
+    }
+    
+    renderQuizContent(content, item, options, keyExpr, `
+        <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
+        <div style="background: var(--card-bg); padding: var(--spacing-lg); border-radius: 12px; margin-bottom: 25px; border-left: 4px solid var(--accent-color);">
+            <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 15px; font-weight: 600;">
+                💡 표현의 의미:
+            </p>
+            <p style="font-size: 1.15rem; line-height: 1.7; color: var(--text-primary);">
+                ${escapeHtml(item.native_core_meaning)}
+            </p>
+        </div>
+        <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 20px; font-weight: 600; text-align: center;">
+            위 의미에 해당하는 영어 표현을 선택하세요
+        </p>
+    `);
+}
+
+// 공통 퀴즈 콘텐츠 렌더링
+function renderQuizContent(content, item, options, keyExpr, questionHtml) {
     content.innerHTML = `
         <div>
-            <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
-            <div class="sentence" style="margin-bottom: 30px;">${sentence}</div>
-            <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 15px; font-weight: 600;">
-                이 문장의 핵심 표현은 무엇일까요?
-            </p>
+            ${questionHtml}
             <div class="quiz-options" role="radiogroup">
                 ${options.map((opt, i) => `
                     <button class="option-btn" 
@@ -402,19 +563,33 @@ function selectAnswer(selected, correct) {
     
     const item = data[currentIndex];
     
+    const item = data[currentIndex];
+    
     if (isCorrect) {
         feedback.innerHTML = `
             <div class="feedback correct" role="alert">
-                <div style="font-size: 1.5em; margin-bottom: 10px;">✓ 정답!</div>
-                <div style="font-weight: normal; margin-top: 10px;">${escapeHtml(item.native_core_meaning)}</div>
+                <div style="font-size: 1.5em; margin-bottom: 10px;">✓ 정답입니다!</div>
+                <div style="font-weight: normal; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <strong>의미:</strong> ${escapeHtml(item.native_core_meaning)}
+                </div>
+                <div style="font-weight: normal; margin-top: 10px; font-style: italic; opacity: 0.9;">
+                    ${escapeHtml(item.natural_korean)}
+                </div>
             </div>
         `;
     } else {
         feedback.innerHTML = `
             <div class="feedback wrong" role="alert">
-                <div style="font-size: 1.5em; margin-bottom: 10px;">✗ 오답</div>
-                <div style="font-weight: normal; margin-top: 10px;">정답: <strong>${escapeHtml(correctDecoded)}</strong></div>
-                <div style="font-weight: normal; margin-top: 5px;">${escapeHtml(item.native_core_meaning)}</div>
+                <div style="font-size: 1.5em; margin-bottom: 10px;">✗ 틀렸습니다</div>
+                <div style="font-weight: normal; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <strong>정답:</strong> <span style="color: #4ade80; font-weight: 600;">${escapeHtml(correctDecoded)}</span>
+                </div>
+                <div style="font-weight: normal; margin-top: 10px;">
+                    <strong>의미:</strong> ${escapeHtml(item.native_core_meaning)}
+                </div>
+                <div style="font-weight: normal; margin-top: 10px; font-style: italic; opacity: 0.9;">
+                    ${escapeHtml(item.natural_korean)}
+                </div>
             </div>
         `;
     }

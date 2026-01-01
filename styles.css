@@ -545,6 +545,31 @@ h1 {
     margin: var(--spacing-md) 0 !important;
 }
 
+/* 퀴즈 문장 스타일 */
+.quiz-sentence {
+    font-size: 1.15rem;
+    font-weight: 500;
+    padding: var(--spacing-lg);
+    background: var(--card-bg);
+    border-radius: 12px;
+    border: 2px solid var(--border-color);
+}
+
+/* 빈칸 하이라이트 */
+.quiz-sentence::before {
+    content: '';
+}
+
+/* 빈칸 스타일링을 위한 인라인 처리 */
+.quiz-sentence {
+    position: relative;
+}
+
+/* 빈칸 강조를 위한 JavaScript로 처리하되, CSS도 준비 */
+.quiz-sentence {
+    word-spacing: 0.1em;
+}
+
 .quiz-options {
     display: flex;
     flex-direction: column;
