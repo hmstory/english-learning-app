@@ -9,6 +9,13 @@ let quizStats = {
     studiedCards: new Set()
 };
 
+// 간격 반복 학습 시스템 - 각 단어별 학습 상태
+let wordLearningData = {}; // { index: { level, nextReview, correctCount, wrongCount, lastStudied, mastery } }
+
+// 간격 반복 학습 설정 (일 단위)
+const SPACED_REPETITION_INTERVALS = [0, 1, 3, 7, 14, 30, 60]; // 레벨별 복습 간격
+const MASTERY_THRESHOLD = 5; // 레벨 5 이상이면 완전 암기로 간주
+
 // 로컬 스토리지에서 진행 상황 불러오기
 function loadProgress() {
     try {
@@ -42,6 +49,15 @@ function loadProgress() {
             };
         }
         
+        // 단어별 학습 데이터 불러오기
+        const wordDataSaved = localStorage.getItem('wordLearningData');
+        if (wordDataSaved) {
+            wordLearningData = JSON.parse(wordDataSaved);
+        }
+        
+        // 학습 목표 및 성취 데이터 불러오기
+        loadAchievementData();
+        
         // 테마 불러오기
         const theme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', theme);
@@ -68,6 +84,9 @@ function saveProgress() {
             studiedCards: Array.from(quizStats.studiedCards)
         };
         localStorage.setItem('englishLearningStats', JSON.stringify(statsToSave));
+        
+        // 단어 학습 데이터 저장
+        saveWordLearningData();
     } catch (e) {
         console.warn('진행 상황을 저장할 수 없습니다:', e);
     }
@@ -88,6 +107,24 @@ function updateStats() {
     
     // 학습한 카드 수
     document.getElementById('studiedCount').textContent = quizStats.studiedCards.size;
+    
+    // 오늘 학습한 단어 수
+    const todayStudiedEl = document.getElementById('todayStudied');
+    if (todayStudiedEl) {
+        todayStudiedEl.textContent = achievementData.todayStudied || 0;
+    }
+    
+    // 연속 학습일
+    const streakEl = document.getElementById('streakDays');
+    if (streakEl) {
+        streakEl.textContent = achievementData.streakDays || 0;
+    }
+    
+    // 완전 암기한 단어 수
+    const masteredEl = document.getElementById('masteredCount');
+    if (masteredEl) {
+        masteredEl.textContent = achievementData.totalWordsMastered || 0;
+    }
     
     // 퀴즈 통계 (퀴즈 모드일 때만 표시)
     if (currentMode === 'quiz') {
@@ -133,13 +170,34 @@ function setMode(mode) {
     }
     
     currentMode = mode;
-    currentIndex = 0;
     isFlipped = false;
     selectedAnswer = null;
     
+    // 모드별 인덱스 설정
+    if (mode === 'review') {
+        // 복습 모드: 오늘 복습해야 할 단어만
+        const reviewWords = getWordsToReview();
+        if (reviewWords.length === 0) {
+            alert('오늘 복습할 단어가 없습니다! 🎉\n모든 단어를 완벽하게 암기하셨네요.');
+            return;
+        }
+        currentIndex = reviewWords[0];
+    } else if (mode === 'difficult') {
+        // 어려운 단어 모드: 틀린 횟수가 많은 단어
+        const difficultWords = getDifficultWords();
+        if (difficultWords.length === 0) {
+            alert('어려운 단어가 없습니다! 🎉\n모든 단어를 잘 알고 계시네요.');
+            return;
+        }
+        currentIndex = difficultWords[0];
+    } else {
+        currentIndex = 0;
+    }
+    
     // 모드 버튼 상태 업데이트
     document.querySelectorAll('.mode-btn').forEach((btn, idx) => {
-        const isActive = (idx === 0 && mode === 'flashcard') || (idx === 1 && mode === 'quiz');
+        const modeNames = ['flashcard', 'quiz', 'review', 'difficult'];
+        const isActive = modeNames[idx] === mode;
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-pressed', isActive);
     });
@@ -166,9 +224,9 @@ function renderCard() {
     // 학습한 카드로 표시
     quizStats.studiedCards.add(currentIndex);
     
-    if (currentMode === 'flashcard') {
+    if (currentMode === 'flashcard' || currentMode === 'review' || currentMode === 'difficult') {
         renderFlashcard(item);
-    } else {
+    } else if (currentMode === 'quiz') {
         renderQuiz(item);
     }
     
@@ -183,6 +241,10 @@ function renderFlashcard(item) {
     const explanationSection = document.getElementById('explanation-section');
     const keyExpr = item.keyExpression || extractKeyExpression(item.sentence);
     
+    // 학습 상태 정보 가져오기
+    const wordData = wordLearningData[currentIndex];
+    const learningStatus = getLearningStatusDisplay(wordData);
+    
     // 카드 부분 - 간단하게 문장과 번역만
     content.innerHTML = `
         <div class="flashcard-wrapper">
@@ -190,7 +252,10 @@ function renderFlashcard(item) {
                  onkeypress="if(event.key==='Enter'||event.key===' ') flipCard()" aria-label="카드 뒤집기">
                 <div class="flashcard-inner">
                     <div class="flashcard-front">
-                        <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; width: 100%; flex-wrap: wrap; gap: 8px;">
+                            <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
+                            <div style="flex-shrink: 0;">${learningStatus}</div>
+                        </div>
                         <div class="sentence">${escapeHtml(item.sentence)}</div>
                         <div class="source">— ${escapeHtml(item.source.title)}</div>
                         <div class="hint">클릭하여 번역 확인하기</div>
@@ -253,13 +318,7 @@ function toggleExplanation() {
     }
 }
 
-// 퀴즈 유형 선택 (랜덤)
-function getQuizType() {
-    const types = ['fillBlank', 'context', 'translation'];
-    return types[Math.floor(Math.random() * types.length)];
-}
-
-// 퀴즈 렌더링 - 다양한 유형 지원
+// 퀴즈 렌더링 - 단어 연상 빈칸 채우기 퀴즈
 function renderQuiz(item) {
     const content = document.getElementById('content');
     const explanationSection = document.getElementById('explanation-section');
@@ -277,20 +336,83 @@ function renderQuiz(item) {
         return;
     }
     
-    // 퀴즈 유형 선택
-    const quizType = getQuizType();
-    
-    if (quizType === 'fillBlank') {
-        renderFillBlankQuiz(item, keyExpr);
-    } else if (quizType === 'context') {
-        renderContextQuiz(item, keyExpr);
-    } else {
-        renderTranslationQuiz(item, keyExpr);
-    }
+    // 단어 연상 빈칸 채우기 퀴즈 렌더링
+    renderWordAssociationQuiz(item, keyExpr);
 }
 
-// 빈칸 채우기 퀴즈
-function renderFillBlankQuiz(item, keyExpr) {
+// 영어 교사 관점에서 의미적으로 유사한 보기 생성
+function generateSmartOptions(currentItem, correctExpr) {
+    // 1. 같은 태그를 가진 표현들 (의미적으로 유사)
+    const sameTagExpressions = data
+        .filter((d, i) => i !== currentIndex && d.tags && currentItem.tags)
+        .filter(d => {
+            const commonTags = d.tags.filter(tag => currentItem.tags.includes(tag));
+            return commonTags.length > 0;
+        })
+        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
+        .filter(expr => expr && expr.length > 0 && expr !== correctExpr);
+    
+    // 2. 같은 난이도를 가진 표현들
+    const sameDifficultyExpressions = data
+        .filter((d, i) => i !== currentIndex && d.difficulty === currentItem.difficulty)
+        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
+        .filter(expr => expr && expr.length > 0 && expr !== correctExpr);
+    
+    // 3. 비슷한 길이의 표현들 (단어 수 기준)
+    const correctWordCount = correctExpr.split(/\s+/).length;
+    const similarLengthExpressions = data
+        .filter((d, i) => i !== currentIndex)
+        .map(d => ({
+            expr: d.keyExpression || extractKeyExpression(d.sentence),
+            wordCount: (d.keyExpression || extractKeyExpression(d.sentence)).split(/\s+/).length
+        }))
+        .filter(obj => obj.expr && obj.expr.length > 0 && obj.expr !== correctExpr)
+        .filter(obj => Math.abs(obj.wordCount - correctWordCount) <= 2) // ±2 단어 차이
+        .map(obj => obj.expr);
+    
+    // 4. 비슷한 단어를 포함한 표현들
+    const correctWords = correctExpr.toLowerCase().split(/\s+/);
+    const similarWordExpressions = data
+        .filter((d, i) => i !== currentIndex)
+        .map(d => {
+            const expr = d.keyExpression || extractKeyExpression(d.sentence);
+            if (!expr || expr === correctExpr) return null;
+            const exprWords = expr.toLowerCase().split(/\s+/);
+            const commonWords = correctWords.filter(w => exprWords.includes(w));
+            return { expr, commonWords: commonWords.length };
+        })
+        .filter(obj => obj && obj.commonWords > 0)
+        .sort((a, b) => b.commonWords - a.commonWords)
+        .map(obj => obj.expr);
+    
+    // 우선순위: 같은 태그 > 같은 난이도 > 비슷한 길이 > 비슷한 단어
+    const allOptions = [
+        ...sameTagExpressions.slice(0, 2),
+        ...sameDifficultyExpressions.filter(e => !sameTagExpressions.includes(e)).slice(0, 1),
+        ...similarLengthExpressions.filter(e => !sameTagExpressions.includes(e) && !sameDifficultyExpressions.includes(e)).slice(0, 1),
+        ...similarWordExpressions.filter(e => !sameTagExpressions.includes(e) && !sameDifficultyExpressions.includes(e) && !similarLengthExpressions.includes(e)).slice(0, 1)
+    ];
+    
+    // 중복 제거 및 최대 3개 선택
+    const uniqueOptions = [...new Set(allOptions)];
+    
+    // 부족하면 랜덤으로 채우기
+    if (uniqueOptions.length < 3) {
+        const randomOptions = data
+            .filter((d, i) => i !== currentIndex)
+            .map(d => d.keyExpression || extractKeyExpression(d.sentence))
+            .filter(expr => expr && expr.length > 0 && expr !== correctExpr && !uniqueOptions.includes(expr))
+            .sort(() => 0.5 - Math.random())
+            .slice(0, 3 - uniqueOptions.length);
+        
+        uniqueOptions.push(...randomOptions);
+    }
+    
+    return uniqueOptions.slice(0, 3);
+}
+
+// 단어 연상 빈칸 채우기 퀴즈 (의미 설명을 보고 빈칸 채우기)
+function renderWordAssociationQuiz(item, keyExpr) {
     const content = document.getElementById('content');
     
     // 문장에서 핵심 표현을 빈칸으로 대체
@@ -351,13 +473,8 @@ function renderFillBlankQuiz(item, keyExpr) {
         finalSentence = sentence;
     }
     
-    // 오답 생성 (다른 문장들의 핵심 표현 또는 유사한 표현)
-    const otherExpressions = data
-        .filter((_, i) => i !== currentIndex)
-        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
-        .filter(expr => expr && expr.length > 0 && expr !== keyExpr)
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
+    // 영어 교사 관점에서 의미적으로 유사한 보기 생성
+    const otherExpressions = generateSmartOptions(item, keyExpr);
     
     const options = [...otherExpressions, keyExpr]
         .filter(opt => opt && opt.length > 0)
@@ -376,81 +493,7 @@ function renderFillBlankQuiz(item, keyExpr) {
     
     renderQuizContent(content, item, options, keyExpr, `
         <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
-        <div class="sentence quiz-sentence" style="margin-bottom: 30px; line-height: 1.8;">
-            ${sentenceWithStyledBlank}
-        </div>
-        <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 20px; font-weight: 600; text-align: center;">
-            빈칸에 들어갈 적절한 표현을 선택하세요
-        </p>
-    `);
-}
-
-// 문맥 이해 퀴즈 (한국어 번역을 보고 적절한 영어 표현 선택)
-function renderContextQuiz(item, keyExpr) {
-    const content = document.getElementById('content');
-    
-    // 오답 생성
-    const otherExpressions = data
-        .filter((_, i) => i !== currentIndex)
-        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
-        .filter(expr => expr && expr.length > 0 && expr !== keyExpr)
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
-    
-    const options = [...otherExpressions, keyExpr]
-        .filter(opt => opt && opt.length > 0)
-        .sort(() => 0.5 - Math.random());
-    
-    if (options.length === 0) {
-        content.innerHTML = '<p style="text-align: center; color: #f56565;">퀴즈를 생성할 수 없습니다.</p>';
-        return;
-    }
-    
-    renderQuizContent(content, item, options, keyExpr, `
-        <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
         <div style="background: var(--card-bg); padding: var(--spacing-lg); border-radius: 12px; margin-bottom: 25px; border-left: 4px solid var(--primary-color);">
-            <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 15px; font-weight: 600;">
-                📖 한국어 번역:
-            </p>
-            <p style="font-size: 1.15rem; line-height: 1.7; color: var(--text-primary); font-style: italic;">
-                "${escapeHtml(item.natural_korean)}"
-            </p>
-        </div>
-        <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 20px; font-weight: 600; text-align: center;">
-            위 번역에 해당하는 영어 문장의 핵심 표현은?
-        </p>
-        <div style="background: var(--card-bg); padding: var(--spacing-md); border-radius: 8px; margin-bottom: 20px; opacity: 0.8;">
-            <p style="font-size: 0.95rem; color: var(--text-tertiary); text-align: center;">
-                ${escapeHtml(item.sentence)}
-            </p>
-        </div>
-    `);
-}
-
-// 번역 기반 퀴즈 (핵심 표현의 의미를 보고 선택)
-function renderTranslationQuiz(item, keyExpr) {
-    const content = document.getElementById('content');
-    
-    // 오답 생성
-    const otherExpressions = data
-        .filter((_, i) => i !== currentIndex)
-        .map(d => d.keyExpression || extractKeyExpression(d.sentence))
-        .filter(expr => expr && expr.length > 0 && expr !== keyExpr)
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
-    
-    const options = [...otherExpressions, keyExpr]
-        .filter(opt => opt && opt.length > 0)
-        .sort(() => 0.5 - Math.random());
-    
-    if (options.length === 0) {
-        content.innerHTML = '<p style="text-align: center; color: #f56565;">퀴즈를 생성할 수 없습니다.</p>';
-        return;
-    }
-    
-    renderQuizContent(content, item, options, keyExpr, `
-        <div class="difficulty-tag">${escapeHtml(item.difficulty)}</div>
-        <div style="background: var(--card-bg); padding: var(--spacing-lg); border-radius: 12px; margin-bottom: 25px; border-left: 4px solid var(--accent-color);">
             <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 15px; font-weight: 600;">
                 💡 표현의 의미:
             </p>
@@ -458,8 +501,11 @@ function renderTranslationQuiz(item, keyExpr) {
                 ${escapeHtml(item.native_core_meaning)}
             </p>
         </div>
+        <div class="sentence quiz-sentence" style="margin-bottom: 30px; line-height: 1.8;">
+            ${sentenceWithStyledBlank}
+        </div>
         <p style="font-size: 1.1em; color: var(--text-secondary); margin-bottom: 20px; font-weight: 600; text-align: center;">
-            위 의미에 해당하는 영어 표현을 선택하세요
+            위 의미에 맞는 표현으로 빈칸을 채우세요
         </p>
     `);
 }
@@ -487,8 +533,15 @@ function renderQuizContent(content, item, options, keyExpr, questionHtml) {
         button.appendChild(span);
         
         // 이벤트 리스너로 안전하게 연결
-        button.addEventListener('click', () => {
-            selectAnswer(opt, keyExpr);
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('버튼 클릭됨:', opt); // 디버깅용
+            if (typeof selectAnswer === 'function') {
+                selectAnswer(opt, keyExpr);
+            } else {
+                console.error('selectAnswer 함수를 찾을 수 없습니다');
+            }
         });
         
         optionsContainer.appendChild(button);
@@ -597,6 +650,15 @@ function selectAnswer(selected, correct) {
         quizStats.correct++;
     }
     
+    // 간격 반복 학습 시스템 업데이트 (에러 방지)
+    try {
+        if (typeof updateWordLearning === 'function') {
+            updateWordLearning(currentIndex, isCorrect);
+        }
+    } catch (e) {
+        console.warn('학습 데이터 업데이트 실패:', e);
+    }
+    
     buttons.forEach(btn => {
         const option = btn.getAttribute('data-option');
         if (!option) return;
@@ -662,8 +724,35 @@ function selectAnswer(selected, correct) {
 
 // 이전 카드
 function previousCard() {
-    if (currentIndex > 0) {
-        currentIndex--;
+    let prevIndex = -1;
+    
+    if (currentMode === 'review') {
+        // 복습 모드: 이전 복습할 단어 찾기
+        const reviewWords = getWordsToReview();
+        const currentPos = reviewWords.indexOf(currentIndex);
+        if (currentPos > 0) {
+            prevIndex = reviewWords[currentPos - 1];
+        } else if (reviewWords.length > 0) {
+            prevIndex = reviewWords[reviewWords.length - 1]; // 마지막으로
+        }
+    } else if (currentMode === 'difficult') {
+        // 어려운 단어 모드: 이전 어려운 단어 찾기
+        const difficultWords = getDifficultWords();
+        const currentPos = difficultWords.indexOf(currentIndex);
+        if (currentPos > 0) {
+            prevIndex = difficultWords[currentPos - 1];
+        } else if (difficultWords.length > 0) {
+            prevIndex = difficultWords[difficultWords.length - 1]; // 마지막으로
+        }
+    } else {
+        // 일반 모드: 순차적으로
+        if (currentIndex > 0) {
+            prevIndex = currentIndex - 1;
+        }
+    }
+    
+    if (prevIndex >= 0) {
+        currentIndex = prevIndex;
         isFlipped = false;
         selectedAnswer = null;
         const explanationSection = document.getElementById('explanation-section');
@@ -720,6 +809,196 @@ function decodeHtml(html) {
 // 정규식 이스케이프
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ========== 간격 반복 학습 시스템 ==========
+
+// 단어 학습 상태 업데이트
+function updateWordLearning(wordIndex, isCorrect) {
+    if (!wordLearningData[wordIndex]) {
+        wordLearningData[wordIndex] = {
+            level: 0,
+            nextReview: Date.now(),
+            correctCount: 0,
+            wrongCount: 0,
+            lastStudied: Date.now(),
+            mastery: false
+        };
+    }
+    
+    const wordData = wordLearningData[wordIndex];
+    wordData.lastStudied = Date.now();
+    
+    if (isCorrect) {
+        wordData.correctCount++;
+        // 정답이면 레벨 상승
+        if (wordData.level < SPACED_REPETITION_INTERVALS.length - 1) {
+            wordData.level++;
+        }
+    } else {
+        wordData.wrongCount++;
+        // 오답이면 레벨 하향 (최소 0)
+        if (wordData.level > 0) {
+            wordData.level = Math.max(0, wordData.level - 1);
+        }
+    }
+    
+    // 다음 복습 시간 계산 (일 단위)
+    const daysUntilReview = SPACED_REPETITION_INTERVALS[wordData.level];
+    wordData.nextReview = Date.now() + (daysUntilReview * 24 * 60 * 60 * 1000);
+    
+    // 완전 암기 여부
+    wordData.mastery = wordData.level >= MASTERY_THRESHOLD && wordData.correctCount >= 3;
+    
+    // 저장
+    saveWordLearningData();
+    updateAchievementData();
+}
+
+// 단어 학습 데이터 저장
+function saveWordLearningData() {
+    try {
+        localStorage.setItem('wordLearningData', JSON.stringify(wordLearningData));
+    } catch (e) {
+        console.warn('단어 학습 데이터 저장 실패:', e);
+    }
+}
+
+// 오늘 복습해야 할 단어 목록 가져오기
+function getWordsToReview() {
+    const now = Date.now();
+    return data
+        .map((item, index) => ({ item, index }))
+        .filter(({ index }) => {
+            const wordData = wordLearningData[index];
+            if (!wordData) return true; // 아직 학습하지 않은 단어
+            return now >= wordData.nextReview; // 복습 시간이 된 단어
+        })
+        .map(({ index }) => index);
+}
+
+// 어려운 단어 목록 가져오기 (틀린 횟수가 많은 순)
+function getDifficultWords(limit = 10) {
+    return Object.entries(wordLearningData)
+        .filter(([index, data]) => data.wrongCount > 0)
+        .sort((a, b) => {
+            // 틀린 횟수 우선, 그 다음 정답률
+            const wrongDiff = b[1].wrongCount - a[1].wrongCount;
+            if (wrongDiff !== 0) return wrongDiff;
+            const accuracyA = a[1].correctCount / (a[1].correctCount + a[1].wrongCount);
+            const accuracyB = b[1].correctCount / (b[1].correctCount + b[1].wrongCount);
+            return accuracyA - accuracyB;
+        })
+        .slice(0, limit)
+        .map(([index]) => parseInt(index));
+}
+
+// 완전 암기한 단어 목록
+function getMasteredWords() {
+    return Object.entries(wordLearningData)
+        .filter(([index, data]) => data.mastery)
+        .map(([index]) => parseInt(index));
+}
+
+// 학습 목표 및 성취 데이터
+let achievementData = {
+    dailyGoal: 10, // 하루 목표 단어 수
+    todayStudied: 0,
+    todayDate: new Date().toDateString(),
+    streakDays: 0, // 연속 학습일
+    lastStudyDate: null,
+    totalWordsMastered: 0,
+    totalStudyDays: 0
+};
+
+// 성취 데이터 불러오기
+function loadAchievementData() {
+    try {
+        const saved = localStorage.getItem('achievementData');
+        if (saved) {
+            achievementData = JSON.parse(saved);
+            
+            // 날짜가 바뀌었는지 확인
+            const today = new Date().toDateString();
+            if (achievementData.todayDate !== today) {
+                // 연속 학습일 체크
+                const lastDate = achievementData.lastStudyDate ? new Date(achievementData.lastStudyDate) : null;
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                if (lastDate && lastDate.toDateString() === yesterday.toDateString()) {
+                    achievementData.streakDays++;
+                } else if (lastDate && lastDate.toDateString() !== today) {
+                    achievementData.streakDays = 0; // 연속이 끊김
+                }
+                
+                achievementData.todayDate = today;
+                achievementData.todayStudied = 0;
+                saveAchievementData();
+            }
+        }
+    } catch (e) {
+        console.warn('성취 데이터 불러오기 실패:', e);
+    }
+}
+
+// 성취 데이터 저장
+function saveAchievementData() {
+    try {
+        localStorage.setItem('achievementData', JSON.stringify(achievementData));
+    } catch (e) {
+        console.warn('성취 데이터 저장 실패:', e);
+    }
+}
+
+// 성취 데이터 업데이트
+function updateAchievementData() {
+    const today = new Date().toDateString();
+    if (achievementData.todayDate === today) {
+        achievementData.todayStudied++;
+    } else {
+        achievementData.todayDate = today;
+        achievementData.todayStudied = 1;
+    }
+    
+    achievementData.lastStudyDate = new Date().toISOString();
+    achievementData.totalWordsMastered = getMasteredWords().length;
+    
+    saveAchievementData();
+    updateStats();
+}
+
+// 학습 상태 표시 HTML 생성
+function getLearningStatusDisplay(wordData) {
+    if (!wordData) {
+        return '<span style="font-size: 0.85rem; color: var(--text-tertiary); padding: 4px 8px; background: var(--card-bg); border-radius: 6px;">🆕 새 단어</span>';
+    }
+    
+    const level = wordData.level || 0;
+    const mastery = wordData.mastery;
+    const correctCount = wordData.correctCount || 0;
+    const wrongCount = wordData.wrongCount || 0;
+    
+    let statusText = '';
+    let statusColor = '';
+    
+    if (mastery) {
+        statusText = '✅ 완전 암기';
+        statusColor = '#10b981';
+    } else if (level >= 3) {
+        statusText = `📚 레벨 ${level}`;
+        statusColor = '#3b82f6';
+    } else if (level >= 1) {
+        statusText = `📖 레벨 ${level}`;
+        statusColor = '#f59e0b';
+    } else {
+        statusText = '🔄 학습 중';
+        statusColor = '#ef4444';
+    }
+    
+    return `<span style="font-size: 0.85rem; color: white; padding: 4px 8px; background: ${statusColor}; border-radius: 6px; font-weight: 500;">
+        ${statusText} (✓${correctCount} ✗${wrongCount})
+    </span>`;
 }
 
 // 키보드 단축키
