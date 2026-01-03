@@ -9,6 +9,9 @@ let quizStats = {
     studiedCards: new Set()
 };
 
+// 랜덤 순서 배열 (항상 랜덤으로 출제)
+let randomOrder = [];
+
 // 간격 반복 학습 시스템 - 각 단어별 학습 상태
 let wordLearningData = {}; // { index: { level, nextReview, correctCount, wrongCount, lastStudied, mastery } }
 
@@ -162,6 +165,18 @@ function updateThemeIcon(theme) {
     }
 }
 
+// 랜덤 순서 생성
+function generateRandomOrder() {
+    if (!data || data.length === 0) return [];
+    const order = Array.from({ length: data.length }, (_, i) => i);
+    // Fisher-Yates 셔플 알고리즘
+    for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+    }
+    return order;
+}
+
 // 모드 변경
 function setMode(mode) {
     if (!data || data.length === 0) {
@@ -173,30 +188,13 @@ function setMode(mode) {
     isFlipped = false;
     selectedAnswer = null;
     
-    // 모드별 인덱스 설정
-    if (mode === 'review') {
-        // 복습 모드: 오늘 복습해야 할 단어만
-        const reviewWords = getWordsToReview();
-        if (reviewWords.length === 0) {
-            alert('오늘 복습할 단어가 없습니다! 🎉\n모든 단어를 완벽하게 암기하셨네요.');
-            return;
-        }
-        currentIndex = reviewWords[0];
-    } else if (mode === 'difficult') {
-        // 어려운 단어 모드: 틀린 횟수가 많은 단어
-        const difficultWords = getDifficultWords();
-        if (difficultWords.length === 0) {
-            alert('어려운 단어가 없습니다! 🎉\n모든 단어를 잘 알고 계시네요.');
-            return;
-        }
-        currentIndex = difficultWords[0];
-    } else {
-        currentIndex = 0;
-    }
+    // 랜덤 순서 생성
+    randomOrder = generateRandomOrder();
+    currentIndex = randomOrder[0] || 0;
     
     // 모드 버튼 상태 업데이트
     document.querySelectorAll('.mode-btn').forEach((btn, idx) => {
-        const modeNames = ['flashcard', 'quiz', 'review', 'difficult'];
+        const modeNames = ['flashcard', 'quiz'];
         const isActive = modeNames[idx] === mode;
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-pressed', isActive);
@@ -214,17 +212,25 @@ function renderCard() {
         return;
     }
     
+    // 랜덤 순서가 없으면 생성
+    if (randomOrder.length === 0) {
+        randomOrder = generateRandomOrder();
+    }
+    
+    // 현재 인덱스가 유효한지 확인
     if (currentIndex < 0 || currentIndex >= data.length) {
-        currentIndex = 0;
+        currentIndex = randomOrder[0] || 0;
     }
     
     const item = data[currentIndex];
-    document.getElementById('progress').textContent = `${currentIndex + 1} / ${data.length}`;
+    const currentPos = randomOrder.indexOf(currentIndex);
+    const displayNumber = currentPos >= 0 ? currentPos + 1 : 1;
+    document.getElementById('progress').textContent = `${displayNumber} / ${data.length}`;
     
     // 학습한 카드로 표시
     quizStats.studiedCards.add(currentIndex);
     
-    if (currentMode === 'flashcard' || currentMode === 'review' || currentMode === 'difficult') {
+    if (currentMode === 'flashcard') {
         renderFlashcard(item);
     } else if (currentMode === 'quiz') {
         renderQuiz(item);
@@ -722,33 +728,20 @@ function selectAnswer(selected, correct) {
     saveProgress();
 }
 
-// 이전 카드
+// 이전 카드 (랜덤 순서)
 function previousCard() {
+    if (randomOrder.length === 0) {
+        randomOrder = generateRandomOrder();
+    }
+    
+    const currentPos = randomOrder.indexOf(currentIndex);
     let prevIndex = -1;
     
-    if (currentMode === 'review') {
-        // 복습 모드: 이전 복습할 단어 찾기
-        const reviewWords = getWordsToReview();
-        const currentPos = reviewWords.indexOf(currentIndex);
-        if (currentPos > 0) {
-            prevIndex = reviewWords[currentPos - 1];
-        } else if (reviewWords.length > 0) {
-            prevIndex = reviewWords[reviewWords.length - 1]; // 마지막으로
-        }
-    } else if (currentMode === 'difficult') {
-        // 어려운 단어 모드: 이전 어려운 단어 찾기
-        const difficultWords = getDifficultWords();
-        const currentPos = difficultWords.indexOf(currentIndex);
-        if (currentPos > 0) {
-            prevIndex = difficultWords[currentPos - 1];
-        } else if (difficultWords.length > 0) {
-            prevIndex = difficultWords[difficultWords.length - 1]; // 마지막으로
-        }
-    } else {
-        // 일반 모드: 순차적으로
-        if (currentIndex > 0) {
-            prevIndex = currentIndex - 1;
-        }
+    if (currentPos > 0) {
+        prevIndex = randomOrder[currentPos - 1];
+    } else if (randomOrder.length > 0) {
+        // 첫 번째면 마지막으로 순환
+        prevIndex = randomOrder[randomOrder.length - 1];
     }
     
     if (prevIndex >= 0) {
@@ -763,10 +756,25 @@ function previousCard() {
     }
 }
 
-// 다음 카드
+// 다음 카드 (랜덤 순서)
 function nextCard() {
-    if (currentIndex < data.length - 1) {
-        currentIndex++;
+    if (randomOrder.length === 0) {
+        randomOrder = generateRandomOrder();
+    }
+    
+    const currentPos = randomOrder.indexOf(currentIndex);
+    let nextIndex = -1;
+    
+    if (currentPos >= 0 && currentPos < randomOrder.length - 1) {
+        nextIndex = randomOrder[currentPos + 1];
+    } else if (randomOrder.length > 0) {
+        // 마지막이면 처음으로 순환하거나 새로운 랜덤 순서 생성
+        randomOrder = generateRandomOrder();
+        nextIndex = randomOrder[0];
+    }
+    
+    if (nextIndex >= 0) {
+        currentIndex = nextIndex;
         isFlipped = false;
         selectedAnswer = null;
         const explanationSection = document.getElementById('explanation-section');
@@ -782,11 +790,18 @@ function updateButtons() {
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     
+    if (randomOrder.length === 0) {
+        randomOrder = generateRandomOrder();
+    }
+    
+    const currentPos = randomOrder.indexOf(currentIndex);
+    
+    // 랜덤 순서에서는 항상 버튼 활성화 (순환)
     if (prevBtn) {
-        prevBtn.disabled = currentIndex === 0;
+        prevBtn.disabled = false;
     }
     if (nextBtn) {
-        nextBtn.disabled = currentIndex >= data.length - 1;
+        nextBtn.disabled = false;
     }
 }
 
@@ -1029,6 +1044,9 @@ document.addEventListener('DOMContentLoaded', () => {
             '<p style="text-align: center; color: #f56565;">데이터를 불러올 수 없습니다. data.js 파일을 확인해주세요.</p>';
         return;
     }
+    
+    // 초기 랜덤 순서 생성
+    randomOrder = generateRandomOrder();
     
     loadProgress();
     renderCard();
