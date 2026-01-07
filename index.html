@@ -2,89 +2,92 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#2563eb">
-    <meta name="description" content="Big Little Lies 원서를 활용한 영어 단어 및 표현 학습 앱">
-    <title>영어 원서 단어 학습 앱</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="영어 원문 해석과 독해 페인포인트 프로파일링">
+    <title>Loopback POC</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="header-top">
-                <h1>📚 영어 원서 학습</h1>
-                <button class="theme-toggle" onclick="toggleTheme()" aria-label="다크 모드 전환" id="themeToggle">
-                    <span class="theme-icon">🌙</span>
-                </button>
+    <div class="app">
+        <header class="app-header">
+            <div>
+                <p class="app-eyebrow">Loopback POC</p>
+                <h1>영어 원문 독해 프로파일링</h1>
+                <p class="app-subtitle">정답 번역 없이 막힘 지점을 먼저 포착하고 마지막에 코치 요약을 확인합니다.</p>
             </div>
-            <p class="subtitle">Big Little Lies 문장 암기</p>
+            <div class="settings">
+                <label class="setting-field">
+                    <span>API 키</span>
+                    <input type="password" id="apiKey" placeholder="API 키 입력">
+                </label>
+                <label class="setting-field">
+                    <span>모델</span>
+                    <input type="text" id="model" placeholder="모델 이름 입력">
+                </label>
+                <button class="btn" id="saveSettings">설정 저장</button>
+            </div>
         </header>
 
-        <div class="stats-bar" id="statsBar">
-            <div class="stat-item">
-                <span class="stat-label">진행률</span>
-                <span class="stat-value" id="progressPercent">0%</span>
-            </div>
-            <div class="stat-item" id="quizStats" style="display: none;">
-                <span class="stat-label">정답률</span>
-                <span class="stat-value" id="correctRate">-</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">오늘 학습</span>
-                <span class="stat-value" id="todayStudied">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">연속 학습</span>
-                <span class="stat-value" id="streakDays">0일</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">완전 암기</span>
-                <span class="stat-value" id="masteredCount">0</span>
-            </div>
-        </div>
-
-        <div class="mode-selector" role="tablist">
-            <button class="mode-btn active" onclick="setMode('flashcard')" aria-pressed="true" aria-label="플래시카드 모드">
-                <span class="mode-icon">🎴</span>
-                <span>플래시카드</span>
-            </button>
-            <button class="mode-btn" onclick="setMode('quiz')" aria-pressed="false" aria-label="퀴즈 모드">
-                <span class="mode-icon">❓</span>
-                <span>핵심 표현 퀴즈</span>
-            </button>
-        </div>
-
-        <div class="card-container">
-            <div class="progress-section">
-                <div class="progress-header">
-                    <span class="progress-text" id="progress" aria-live="polite">1 / 10</span>
+        <main class="workspace">
+            <section class="card">
+                <div class="card-header">
+                    <p class="card-label">원문 카드</p>
+                    <p class="card-counter" id="cardCounter">1 / 1</p>
                 </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
+                <p class="sentence" id="sourceSentence"></p>
+                <div class="selection-row">
+                    <div>
+                        <p class="hint">문장에서 막힘 위치를 드래그로 선택한 뒤 버튼을 누르세요.</p>
+                        <p class="selected" id="selectedSpan">선택한 막힘 없음</p>
+                    </div>
+                    <button class="btn ghost" id="captureSpan">막힘 기록</button>
                 </div>
-            </div>
-            <div id="content" role="main"></div>
-            <div id="explanation-section" style="display: none;"></div>
-            <div class="controls">
-                <button class="btn btn-secondary" onclick="previousCard()" id="prevBtn" aria-label="이전 카드">
-                    <span class="btn-icon">←</span>
-                    <span>이전</span>
-                </button>
-                <button class="btn btn-primary" onclick="nextCard()" id="nextBtn" aria-label="다음 카드">
-                    <span>다음</span>
-                    <span class="btn-icon">→</span>
-                </button>
-            </div>
-        </div>
+                <div class="actions">
+                    <button class="btn" id="generateCheckpoints">체크포인트 생성</button>
+                    <button class="btn ghost" id="nextSentence">다음 문장</button>
+                </div>
+                <p class="status" id="statusMessage"></p>
+            </section>
+
+            <section class="panel">
+                <h2>체크포인트</h2>
+                <div id="checkpointPanel" class="checkpoint-panel">
+                    <p class="placeholder">체크포인트를 생성하면 선택지가 표시됩니다.</p>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>사용자 해석 입력</h2>
+                <textarea id="userTranslation" placeholder="한국어 해석을 입력하세요."></textarea>
+                <button class="btn" id="revealFinal">최종 결과 보기</button>
+            </section>
+
+            <section class="panel" id="finalPanel">
+                <h2>최종 요약</h2>
+                <div class="final-block">
+                    <p class="final-label">원문 하이라이트</p>
+                    <p class="final-sentence" id="finalSentence"></p>
+                </div>
+                <div class="final-block">
+                    <p class="final-label">핵심 의미</p>
+                    <p id="finalCore"></p>
+                </div>
+                <div class="final-block">
+                    <p class="final-label">코치 요약</p>
+                    <p id="finalCoach"></p>
+                </div>
+                <div class="final-block">
+                    <p class="final-label">사용자 해석</p>
+                    <p id="finalUserTranslation"></p>
+                </div>
+            </section>
+        </main>
     </div>
 
     <script src="data.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
-
